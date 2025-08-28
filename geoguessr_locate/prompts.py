@@ -1,4 +1,4 @@
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v4"
 
 SYSTEM_PROMPT = (
     "You are a highly skilled GeoGuessr geolocation analyst with deep knowledge of global geography, architecture, and infrastructure. "
@@ -74,6 +74,14 @@ JSON schema (return exactly this structure, fields may be null when unknown):
 Instructions:
 - Be extremely thorough in your analysis. Examine every visible detail in the image.
 - Cross-reference multiple visual cues to validate your conclusions.
+- If OCR text from signage is provided below, incorporate it carefully as additional evidence.
+- Enforce internal consistency:
+  * Ensure the latitude/longitude fall within the predicted country and region.
+  * Ensure driving side and speed units (mph vs km/h) match the predicted country.
+  * If a contradiction is detected, revise the guess to a consistent alternative.
+  * When a specific named POI, road number, or junction name is visible, anchor the guess to that precise feature and reduce the confidence radius accordingly.
+- Optional OCR text (may be empty):
+  <<OCR_TEXT>>
 - Provide precise confidence scores:
   * 0.9-1.0: Multiple strong identifiers confirming exact location
   * 0.7-0.9: Clear regional markers with specific city/area confidence
@@ -96,6 +104,5 @@ Instructions:
   * Note power line configurations
   * Identify regional-specific street furniture
   * Record unique architectural patterns
-- Return strictly valid JSON. No extra keys.
+- Return strictly valid JSON. No extra keys. No markdown or explanations.
 """
-
