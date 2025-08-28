@@ -9,6 +9,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from pydantic import ValidationError
 
 from .utils import load_image_bytes, sha256_file
+from .ocr import extract_ocr_text
 from .cache import Cache
 from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, PROMPT_VERSION
 from .types import ModelOutput, Candidate
@@ -53,9 +54,12 @@ def analyze_image(
             pass
 
     image_bytes = load_image_bytes(image_path)
+    # Optional OCR to aid the model with sign text; safe no-op if unavailable
+    ocr_text = extract_ocr_text(image_path) or ""
 
     system = SYSTEM_PROMPT
     user = USER_PROMPT_TEMPLATE.replace("<<TOP_K_MINUS_1>>", str(max(1, top_k - 1)))
+    user = user.replace("<<OCR_TEXT>>", ocr_text)
 
     model = genai.GenerativeModel(
         model_name=model_name,
@@ -78,13 +82,51 @@ def analyze_image(
     except Exception as e:
         raise RuntimeError(f"Gemini call failed: {e}")
 
+    # Robust JSON parsing with simple recovery from markdown fences or extra text
     try:
         text = resp.text
-        data = json.loads(text)
+        data = _parse_model_json(text)
         output = ModelOutput(**data)
     except Exception as e:
         raise JsonParseError(f"Failed to parse model JSON: {e}")
 
     cache.set(cache_key, json.loads(output.model_dump_json()))
     return output
+
+
+def _parse_model_json(text: str) -> dict:
+    """Parse model output into JSON dict with light recovery.
+
+    - Tries direct json.loads
+    - Strips markdown code fences if present
+    - Extracts first {...} block as fallback
+    """
+    # Direct parse
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    # Strip markdown code fences
+    if "```" in text:
+        stripped = text
+        # remove ```json or ``` fences
+        stripped = stripped.replace("```json", "```")
+        parts = stripped.split("```")
+        # pick the largest fenced block as likely JSON
+        if len(parts) >= 3:
+            candidates = [p for i, p in enumerate(parts) if i % 2 == 1]
+            if candidates:
+                largest = max(candidates, key=lambda s: len(s))
+                try:
+                    return json.loads(largest)
+                except Exception:
+                    text = largest
+    # Find first/last braces fallback
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        snippet = text[start : end + 1]
+        return json.loads(snippet)
+    # Give up
+    return json.loads(text)
 

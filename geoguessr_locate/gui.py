@@ -92,6 +92,14 @@ class App(ttk.Frame):
         self.tree.grid(row=row, column=0, columnspan=3, sticky=tk.NSEW, pady=(4,0))
         self.rowconfigure(row, weight=1)
 
+        # Clues panel for primary guess
+        row += 1
+        clues_frame = ttk.LabelFrame(self, text="Primary clues")
+        clues_frame.grid(row=row, column=0, columnspan=3, sticky=tk.EW, pady=(6,4))
+        self.clues_text = tk.Text(clues_frame, height=6, wrap="word")
+        self.clues_text.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self.clues_text.configure(state=tk.DISABLED)
+
         # Bindings
         self.image_path.trace_add("write", lambda *_: self._load_preview())
         master.bind("<Return>", lambda _e: self._run())
@@ -240,6 +248,15 @@ class App(ttk.Frame):
                 ("{:.3f}".format(c.get("latitude")) if c.get("latitude") is not None else "?"),
                 ("{:.3f}".format(c.get("longitude")) if c.get("longitude") is not None else "?"),
             ))
+        # Update clues panel for primary
+        clues_txt = self._format_cues_text(pg.get("cues"))
+        reasons = pg.get("reasons")
+        if reasons:
+            clues_txt = clues_txt + ("\n\nReasoning:\n" + reasons)
+        self.clues_text.configure(state=tk.NORMAL)
+        self.clues_text.delete("1.0", tk.END)
+        self.clues_text.insert("1.0", clues_txt)
+        self.clues_text.configure(state=tk.DISABLED)
         self._toggle_busy(False)
 
     def _error(self, e: Exception):
@@ -315,6 +332,36 @@ class App(ttk.Frame):
         self.master.clipboard_clear()
         self.master.clipboard_append(f"{lat:.6f},{lon:.6f}")
         self.status.set("Coordinates copied to clipboard")
+
+    def _format_cues_text(self, cues) -> str:
+        if not cues:
+            return "—"
+        parts = []
+        ds = cues.get("driving_side")
+        if ds:
+            parts.append(f"Driving: {ds}")
+        langs = cues.get("languages_seen")
+        if isinstance(langs, list) and langs:
+            try:
+                parts.append("Languages: " + ", ".join(str(x) for x in langs))
+            except Exception:
+                pass
+        sf = cues.get("signage_features")
+        if sf:
+            parts.append(f"Signage: {sf}")
+        rm = cues.get("road_markings")
+        if rm:
+            parts.append(f"Road: {rm}")
+        vc = cues.get("vegetation_climate")
+        if vc:
+            parts.append(f"Env: {vc}")
+        ei = cues.get("electrical_infrastructure")
+        if ei:
+            parts.append(f"Infra: {ei}")
+        oc = cues.get("other_cues")
+        if oc:
+            parts.append(f"Other: {oc}")
+        return "\n".join(parts) or "—"
 
 
 def main():
