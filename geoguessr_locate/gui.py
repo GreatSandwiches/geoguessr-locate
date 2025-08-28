@@ -47,6 +47,7 @@ class App(ttk.Frame):
         btns.grid(row=row, column=2, padx=6, sticky=tk.W)
         ttk.Button(btns, text="Browse", command=self._browse).pack(side=tk.LEFT)
         ttk.Button(btns, text="Paste", command=self._paste_image).pack(side=tk.LEFT, padx=(6,0))
+        ttk.Button(btns, text="Capture", command=self._capture_screen).pack(side=tk.LEFT, padx=(6,0))
         self.columnconfigure(1, weight=1)
 
         row += 1
@@ -98,6 +99,13 @@ class App(ttk.Frame):
         master.bind("<Command-v>", lambda _e: self._paste_image())
         # Windows/Linux
         master.bind("<Control-v>", lambda _e: self._paste_image())
+        # Capture screen hotkeys (app-focused)
+        master.bind("<F9>", lambda _e: self._capture_screen())
+        master.bind("<Control-Shift-s>", lambda _e: self._capture_screen())
+
+        # Global hotkeys (work even when minimized)
+        self._hotkey_listener = None
+        self._maybe_start_global_hotkeys()
 
         self._last_result = None
         self._primary_coords = None
@@ -132,6 +140,29 @@ class App(ttk.Frame):
             self.image_path.set(str(data[0]))
         else:
             messagebox.showinfo("Paste", "Clipboard does not contain a supported image")
+
+    def _capture_screen(self):
+        # Capture the entire screen (all monitors if supported) and run analysis
+        try:
+            try:
+                im = ImageGrab.grab(all_screens=True)
+            except TypeError:
+                # all_screens not available in older Pillow versions; fall back to primary screen
+                im = ImageGrab.grab()
+        except Exception as e:
+            messagebox.showerror("Capture failed", f"Cannot capture screen: {e}")
+            return
+        try:
+            cache_dir = get_cache_dir()
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(prefix="capture_", suffix=".png", dir=cache_dir, delete=False) as tmp:
+                im.convert("RGB").save(tmp.name, format="PNG")
+                self.image_path.set(tmp.name)
+        except Exception as e:
+            messagebox.showerror("Capture failed", f"Cannot save capture: {e}")
+            return
+        # Automatically run analysis
+        self._run()
 
     def _load_preview(self):
         path = self.image_path.get().strip()
@@ -233,6 +264,25 @@ class App(ttk.Frame):
         self.master.clipboard_append(txt)
         self.status.set("JSON copied to clipboard")
 
+    def _maybe_start_global_hotkeys(self):
+        # Try to start a global hotkey listener so capture works when minimized
+        try:
+            from pynput import keyboard as kb  # type: ignore
+        except Exception:
+            # Dependency not installed; continue without global hotkeys
+            return
+        try:
+            # Use GlobalHotKeys so it works system-wide
+            self._hotkey_listener = kb.GlobalHotKeys({
+                '<f9>': lambda: self.master.after(0, self._capture_screen),
+                '<ctrl>+<shift>+s': lambda: self.master.after(0, self._capture_screen),
+            })
+            self._hotkey_listener.daemon = True
+            self._hotkey_listener.start()
+            self.status.set("Global hotkeys active: F9 or Ctrl+Shift+S")
+        except Exception as e:
+            # If something goes wrong, just disable global hotkeys
+            self._hotkey_listener = None
 
     def _open_interactive_map(self):
         if not self._last_result:

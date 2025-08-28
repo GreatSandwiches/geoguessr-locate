@@ -1,3 +1,4 @@
+LICENSE
 README.md
 pyproject.toml
 geoguessr_locate/__init__.py

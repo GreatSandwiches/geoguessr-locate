@@ -7,6 +7,7 @@ License: MIT
 Keywords: geoguessr,geolocation,vision,gemini,google
 Requires-Python: >=3.11
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: google-generativeai>=0.7.0
 Requires-Dist: pillow>=10.4.0
 Requires-Dist: requests>=2.32.0
@@ -18,6 +19,8 @@ Requires-Dist: tenacity>=8.3.0
 Requires-Dist: filelock>=3.15.0
 Requires-Dist: orjson>=3.10.0
 Requires-Dist: folium>=0.16.0
+Requires-Dist: pynput>=1.7.0
+Dynamic: license-file
 
 # geoguessr-locate
 

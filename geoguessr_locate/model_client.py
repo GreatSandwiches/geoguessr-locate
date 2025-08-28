@@ -61,9 +61,9 @@ def analyze_image(
         model_name=model_name,
         system_instruction=system,
         generation_config={
-            "temperature": 0.4,
-            "top_p": 0.9,
-            "top_k": 40,
+            "temperature": 0.2,            # lower for determinism
+            "top_p": 0.8,                  # slightly narrower nucleus sampling
+            "top_k": 50,                   # consider more candidates
             "response_mime_type": "application/json",
         },
     )
