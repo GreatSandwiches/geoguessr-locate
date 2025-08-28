@@ -1,0 +1,42 @@
+# geoguessr-locate
+
+A Python CLI that analyzes a GeoGuessr screenshot with Google Gemini Vision and predicts a rough area (country, region/state, nearest major city), returning a primary guess plus top-k alternatives. It can optionally reverse-geocode coordinates via OpenStreetMap Nominatim.
+
+Status: v0.1.0 (initial scaffold)
+
+Features
+- Google Gemini Vision (gemini-1.5-pro by default) for multimodal reasoning
+- Heuristics: language on signs, road features, driving side, signage types, vegetation, architecture
+- Outputs human-readable summary and JSON (top-k candidates with confidence)
+- Optional reverse-geocoding via Nominatim to name regions and cities
+- Local caching to reduce costs during iteration
+
+Quick start
+1) Prereqs: Python 3.11+
+2) Create a virtualenv and install:
+   - With uv (recommended):
+     uv venv
+     source .venv/bin/activate
+     uv pip install -e .
+   - Or pip:
+     python3 -m venv .venv
+     source .venv/bin/activate
+     pip install -e .
+3) Configure credentials:
+   - Copy .env.example to .env and set GOOGLE_API_KEY (or export it in your shell)
+4) Run (CLI):
+   geoguessr-locate path/to/screenshot.jpg --top-k 5 --json-out result.json
+5) Run (GUI):
+   geoguessr-locate-gui
+
+Environment
+- GOOGLE_API_KEY: your Google Generative AI key
+- GEOGUESSR_LOCATE_CACHE: optional path to cache directory
+
+Nominatim notes
+- This tool uses the public Nominatim API with a custom User-Agent and light caching.
+- Be respectful: rate limited to at most 1 req/sec. For heavy usage, set up your own instance.
+
+License
+MIT
+

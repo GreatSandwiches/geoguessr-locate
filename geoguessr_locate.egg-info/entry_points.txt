@@ -1,0 +1,3 @@
+[console_scripts]
+geoguessr-locate = geoguessr_locate.cli:app
+geoguessr-locate-gui = geoguessr_locate.gui:main
