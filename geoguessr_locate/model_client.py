@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -12,6 +12,7 @@ from .utils import load_image_bytes, sha256_file
 from .ocr import extract_ocr_text
 from .cache import Cache
 from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, PROMPT_VERSION
+from .preprocess import extract_external_cues
 from .types import ModelOutput, Candidate
 
 
@@ -39,6 +40,7 @@ def analyze_image(
     top_k: int = 5,
     model_name: str = DEFAULT_MODEL,
     cache: Cache | None = None,
+    use_ocr: bool = True,
 ) -> ModelOutput:
     """Call Gemini Vision on an image and return structured candidates."""
     _configure_client()
@@ -55,19 +57,21 @@ def analyze_image(
 
     image_bytes = load_image_bytes(image_path)
     # Optional OCR to aid the model with sign text; safe no-op if unavailable
-    ocr_text = extract_ocr_text(image_path) or ""
+    ocr_text = extract_ocr_text(image_path) or "" if use_ocr else ""
 
     system = SYSTEM_PROMPT
     user = USER_PROMPT_TEMPLATE.replace("<<TOP_K_MINUS_1>>", str(max(1, top_k - 1)))
-    user = user.replace("<<OCR_TEXT>>", ocr_text)
+    user = user.replace("<<OCR_TEXT>>", ocr_text or "(none)")
+    ext = extract_external_cues(image_path)
+    user = user.replace("<<EXTERNAL_CUES>>", ext.as_bullet_text() or "(none)")
 
     model = genai.GenerativeModel(
         model_name=model_name,
         system_instruction=system,
         generation_config={
-            "temperature": 0.2,            # lower for determinism
-            "top_p": 0.8,                  # slightly narrower nucleus sampling
-            "top_k": 50,                   # consider more candidates
+            "temperature": 0.15,
+            "top_p": 0.7,
+            "top_k": 40,
             "response_mime_type": "application/json",
         },
     )
@@ -87,6 +91,7 @@ def analyze_image(
         text = resp.text
         data = _parse_model_json(text)
         output = ModelOutput(**data)
+        _sanitize_precision(output)
     except Exception as e:
         raise JsonParseError(f"Failed to parse model JSON: {e}")
 
@@ -129,4 +134,33 @@ def _parse_model_json(text: str) -> dict:
         return json.loads(snippet)
     # Give up
     return json.loads(text)
+
+
+def _sanitize_precision(output: ModelOutput) -> None:
+    """Reduce false precision by clearing lat/lon when radius is broad or unsupported.
+
+    - If radius > 150km, nullify coordinates (too vague for pinpoint).
+    - If coords present but radius missing, set a conservative minimum (25km)
+      unless reasons mention an explicit road/route pattern.
+    """
+    import re
+
+    route_pattern = re.compile(r"\b(I-?\d+|US ?\d+|A\d+|E\d+|M\d+|BR-?\d+|SP-?\d+|N\d+|D\d+|R\d+)\b", re.I)
+
+    def adjust(c: Candidate) -> None:
+        if c.latitude is None or c.longitude is None:
+            return
+        r = c.confidence_radius_km
+        if r is not None and r > 150:
+            c.latitude = None
+            c.longitude = None
+            return
+        if r is None:
+            if not route_pattern.search(c.reasons or ""):
+                c.confidence_radius_km = 25.0
+
+    adjust(output.primary_guess)
+    for alt in output.alternatives:
+        adjust(alt)
+
 
