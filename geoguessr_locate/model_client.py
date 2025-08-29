@@ -12,7 +12,6 @@ from .utils import load_image_bytes, sha256_file
 from .ocr import extract_ocr_text
 from .cache import Cache
 from .prompts import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE, PROMPT_VERSION
-from .preprocess import extract_external_cues
 from .types import ModelOutput, Candidate
 
 
@@ -62,8 +61,6 @@ def analyze_image(
     system = SYSTEM_PROMPT
     user = USER_PROMPT_TEMPLATE.replace("<<TOP_K_MINUS_1>>", str(max(1, top_k - 1)))
     user = user.replace("<<OCR_TEXT>>", ocr_text or "(none)")
-    ext = extract_external_cues(image_path)
-    user = user.replace("<<EXTERNAL_CUES>>", ext.as_bullet_text() or "(none)")
 
     model = genai.GenerativeModel(
         model_name=model_name,
