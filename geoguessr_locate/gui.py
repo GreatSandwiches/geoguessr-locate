@@ -13,7 +13,7 @@ from PIL import Image, ImageTk, ImageGrab
 import webbrowser
 import folium
 
-from .model_client import analyze_image, DEFAULT_MODEL
+from .model_client import analyze_image, DEFAULT_MODEL, DEFAULT_PROVIDER, GEMINI_DEFAULT_MODEL, OPENAI_DEFAULT_MODEL
 from .analysis import rank_and_finalize
 from .cache import Cache
 from .utils import get_cache_dir
@@ -32,12 +32,14 @@ class App(ttk.Frame):
             default_font.configure(size=12)
         except Exception:
             pass
-
         # Controls
         self.image_path = tk.StringVar()
         self.model_name = tk.StringVar(value=DEFAULT_MODEL)
         self.top_k = tk.IntVar(value=5)
+        self.provider = tk.StringVar(value=DEFAULT_PROVIDER)
         self.do_reverse = tk.BooleanVar(value=True)
+        # Status variable early so provider change binding can reference it
+        self.status = tk.StringVar(value="Ready")
 
         row = 0
         ttk.Label(self, text="Image:").grid(row=row, column=0, sticky=tk.W)
@@ -52,7 +54,54 @@ class App(ttk.Frame):
 
         row += 1
         ttk.Label(self, text="Model:").grid(row=row, column=0, sticky=tk.W)
-        ttk.Entry(self, textvariable=self.model_name, width=30).grid(row=row, column=1, sticky=tk.W)
+        model_frame = ttk.Frame(self)
+        model_frame.grid(row=row, column=1, columnspan=2, sticky=tk.W)
+        ttk.Entry(model_frame, textvariable=self.model_name, width=24).pack(side=tk.LEFT)
+        # Preset models
+        preset_values = [
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-5-nano",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+        ]
+        preset_cb = ttk.Combobox(model_frame, width=16, values=preset_values, state="readonly")
+        preset_cb.pack(side=tk.LEFT, padx=(4,0))
+        ttk.Label(model_frame, text="Provider:").pack(side=tk.LEFT, padx=(8,2))
+        prov_cb = ttk.Combobox(
+            model_frame,
+            textvariable=self.provider,
+            width=8,
+            values=["gemini", "openai"],
+            state="readonly",
+        )
+        prov_cb.pack(side=tk.LEFT)
+        # Provider change handler
+        def _on_provider_change(_e=None):
+            prov = self.provider.get()
+            if prov == "openai" and self.model_name.get().startswith("gemini"):
+                self.model_name.set(OPENAI_DEFAULT_MODEL)
+            elif prov == "gemini" and self.model_name.get().startswith("gpt"):
+                self.model_name.set(GEMINI_DEFAULT_MODEL)
+            self.status.set(f"Provider: {prov}")
+        prov_cb.bind("<<ComboboxSelected>>", _on_provider_change)
+        # Apply preset after provider widgets exist so we can update provider automatically
+        def _apply_preset(_e=None):
+            sel = preset_cb.get()
+            if not sel:
+                return
+            self.model_name.set(sel)
+            if sel.startswith("gpt"):
+                if self.provider.get() != "openai":
+                    self.provider.set("openai")
+                    _on_provider_change()
+            elif sel.startswith("gemini"):
+                if self.provider.get() != "gemini":
+                    self.provider.set("gemini")
+                    _on_provider_change()
+            self.status.set(f"Model: {sel} ({self.provider.get()})")
+        preset_cb.bind("<<ComboboxSelected>>", _apply_preset)
 
         row += 1
         ttk.Label(self, text="Top K:").grid(row=row, column=0, sticky=tk.W)
@@ -68,7 +117,6 @@ class App(ttk.Frame):
         self.copy_btn.grid(row=row, column=2, pady=(8, 8), sticky=tk.W)
 
         row += 1
-        self.status = tk.StringVar(value="Ready")
         ttk.Label(self, textvariable=self.status).grid(row=row, column=0, columnspan=2, sticky=tk.W)
         self.pb = ttk.Progressbar(self, mode="indeterminate")
         self.pb.grid(row=row, column=2, sticky=tk.EW)
@@ -214,12 +262,19 @@ class App(ttk.Frame):
         def worker():
             try:
                 cache = Cache()
-                raw = analyze_image(str(p), top_k=int(self.top_k.get()), model_name=self.model_name.get(), cache=cache)
+                raw = analyze_image(
+                    str(p),
+                    top_k=int(self.top_k.get()),
+                    model_name=self.model_name.get(),
+                    cache=cache,
+                    provider=self.provider.get(),
+                )
                 final = rank_and_finalize(str(p), self.model_name.get(), raw, top_k=int(self.top_k.get()), do_reverse=bool(self.do_reverse.get()))
                 payload = json.loads(final.model_dump_json())
                 self.master.after(0, lambda: self._display_result(payload))
             except Exception as e:
-                self.master.after(0, lambda: self._error(e))
+                # capture e in default arg so it remains bound when lambda runs
+                self.master.after(0, lambda err=e: self._error(err))
         threading.Thread(target=worker, daemon=True).start()
 
     def _display_result(self, payload):
@@ -262,7 +317,15 @@ class App(ttk.Frame):
     def _error(self, e: Exception):
         self._toggle_busy(False)
         self.status.set("Error")
-        messagebox.showerror("Error", str(e))
+        # Unwrap tenacity RetryError to root cause if present
+        root = e
+        try:
+            from tenacity import RetryError  # type: ignore
+            if isinstance(e, RetryError) and e.last_attempt and e.last_attempt.exception():
+                root = e.last_attempt.exception()
+        except Exception:
+            pass
+        messagebox.showerror("Error", f"{type(root).__name__}: {root}")
 
     def _save_json(self):
         if not self._last_result:

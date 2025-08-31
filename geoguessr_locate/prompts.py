@@ -106,3 +106,12 @@ Instructions:
   * Record unique architectural patterns
 - Return strictly valid JSON. No extra keys. No markdown or explanations.
 """
+
+# OpenAI variant: slightly different wording to discourage hallucinated precision and ensure JSON-only output
+USER_PROMPT_TEMPLATE_OPENAI = USER_PROMPT_TEMPLATE + """
+Additional OpenAI-specific instructions:
+- Think briefly but DO NOT output the chain-of-thought; only output the JSON object.
+- If you are not at least 70% confident in precise coordinates within 50km, set latitude and longitude to null and provide a realistic confidence_radius_km instead.
+- If confidence_radius_km > 150, also set latitude and longitude to null.
+- Do not invent non-existent road numbers or place names.
+"""

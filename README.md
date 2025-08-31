@@ -1,11 +1,11 @@
 # geoguessr-locate
 
-A Python CLI that analyzes a GeoGuessr screenshot with Google Gemini Vision and predicts a rough area (country, region/state, nearest major city), returning a primary guess plus top-k alternatives. It can optionally reverse-geocode coordinates via OpenStreetMap Nominatim.
+A Python CLI & GUI that analyzes a GeoGuessr screenshot with Google Gemini Vision (default) or OpenAI vision-capable models and predicts a rough area (country, region/state, nearest major city), returning a primary guess plus top-k alternatives. It can optionally reverse-geocode coordinates via OpenStreetMap Nominatim.
 
 Status: v0.1.0
 
 Features
-- Google Gemini Vision (gemini-2.5-flash-lite by default) for multimodal reasoning
+- Google Gemini Vision (gemini-2.5-flash-lite by default) or OpenAI (e.g. gpt-5-nano default / gpt-4o-mini) vision models
 - Heuristics: language on signs, road features, driving side, signage types, vegetation, architecture
 - Outputs human-readable summary and JSON (top-k candidates with confidence)
 - Optional reverse-geocoding via Nominatim to name regions and cities
@@ -27,7 +27,8 @@ Quick start
      source .venv/bin/activate
      pip install -e .
 3) Configure credentials:
-   - Copy .env.example to .env and set GOOGLE_API_KEY (or export it in your shell)
+   - Copy .env.example to .env and set GOOGLE_API_KEY (or export it in your shell) for Gemini
+   - (Optional) set OPENAI_API_KEY if you want to use OpenAI provider
 4) Run (CLI):
    geoguessr-locate path/to/screenshot.jpg --top-k 5 --json-out result.json
 5) Run (GUI):
@@ -36,9 +37,17 @@ Quick start
    - Global hotkeys: Press F9 or Ctrl+Shift+S to capture while the app is in the background
 
 Environment
-- GOOGLE_API_KEY: your Google Generative AI key
+- GOOGLE_API_KEY: your Google Generative AI key (required for provider=gemini)
+- OPENAI_API_KEY: your OpenAI key (required for provider=openai)
 - GEOGUESSR_LOCATE_CACHE: optional path to cache directory
-- GEOGUESSR_LOCATE_MODEL: optional model override (default: gemini-2.5-flash-lite)
+- GEOGUESSR_LOCATE_MODEL: optional legacy single model override (Gemini default if not set)
+- GEOGUESSR_LOCATE_GEMINI_MODEL: override Gemini default (default gemini-2.5-flash-lite)
+- GEOGUESSR_LOCATE_OPENAI_MODEL: override OpenAI default (default gpt-5-nano)
+- GEOGUESSR_LOCATE_PROVIDER: default provider (gemini or openai; default gemini)
+
+GUI provider switch
+- In the GUI you can select the provider (Gemini or OpenAI) next to the model field.
+- For OpenAI enter a vision-capable model (e.g. gpt-4o-mini) and ensure OPENAI_API_KEY is set.
 
 Nominatim notes
 - This tool uses the public Nominatim API with a custom User-Agent and light caching.
